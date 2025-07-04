@@ -127,6 +127,9 @@ class Application
         }
 
         $this->registerCoreServices();
+
+        // Configurar error handling o mais cedo possível
+        $this->configureBasicErrorHandling();
     }
 
     /**
@@ -287,7 +290,25 @@ class Application
     }
 
     /**
-     * Configura tratamento de erros.
+     * Configura tratamento básico de erros no construtor.
+     *
+     * @return void
+     */
+    protected function configureBasicErrorHandling(): void
+    {
+        // Configuração básica de erro que funciona mesmo sem config carregado
+        error_reporting(E_ALL);
+        ini_set('log_errors', '1');
+
+        // Por enquanto, mostrar erros até config ser carregado
+        ini_set('display_errors', '1');
+
+        set_error_handler([$this, 'handleError']);
+        set_exception_handler([$this, 'handleException']);
+    }
+
+    /**
+     * Configura tratamento de erros com base na configuração.
      *
      * @return void
      */
@@ -298,15 +319,17 @@ class Application
         if ($debug) {
             error_reporting(E_ALL);
             ini_set('display_errors', '1');
+            ini_set('log_errors', '1');
         } else {
-            error_reporting(0);
+            error_reporting(E_ALL); // Manter ativo para logs
             ini_set('display_errors', '0');
+            ini_set('log_errors', '1');
         }
 
         set_error_handler([$this, 'handleError']);
         /**
- * @phpstan-ignore-next-line
-*/
+         * @phpstan-ignore-next-line
+         */
         set_exception_handler([$this, 'handleException']);
     }
 
@@ -356,7 +379,6 @@ class Application
         if ($provider instanceof ServiceProvider) {
             $this->serviceProviders[] = $provider;
         }
-
         return $this;
     }
 
@@ -458,8 +480,8 @@ class Application
 
         try {
             // Encontrar rota
-            $route = $this->router::identify($request->getMethod(), $request->getPathCallable);
-
+            $route = $this->router::identify($request->getMethod(), $request->getPathCallable());
+            $request->setPath($route['path'] ?? $request->getPathCallable());
             if (!$route) {
                 throw new HttpException(404, 'Route not found');
             }
@@ -624,10 +646,18 @@ class Application
                 ]
             );
         } else {
+            // Em produção, gerar ID único para o erro e logar detalhes
+            $errorId = uniqid('err_', true);
+
+            // Log detalhado para análise posterior
+            $this->logException($e, $errorId);
+
             return $response->json(
                 [
                     'error' => true,
-                    'message' => $statusCode === 404 ? 'Not Found' : 'Internal Server Error'
+                    'message' => $statusCode === 404 ? 'Not Found' : 'Internal Server Error',
+                    'error_id' => $errorId,
+                    'trace' => $debug ? $e->getTraceAsString() : null
                 ]
             );
         }
@@ -637,28 +667,42 @@ class Application
      * Registra uma exceção no log usando PSR-3.
      *
      * @param  Throwable $e Exceção
+     * @param  string|null $errorId ID único do erro (opcional)
      * @return void
      */
-    protected function logException(Throwable $e): void
+    protected function logException(Throwable $e, ?string $errorId = null): void
     {
         try {
             if ($this->container->has('logger')) {
                 $logger = $this->container->get('logger');
                 if ($logger instanceof LoggerInterface) {
-                    $logger->error(
-                        'Exception: {message}',
-                        [
-                            'message' => $e->getMessage(),
-                            'file' => $e->getFile(),
-                            'line' => $e->getLine(),
-                            'trace' => $e->getTraceAsString()
-                        ]
-                    );
+                    $context = [
+                        'message' => $e->getMessage(),
+                        'file' => $e->getFile(),
+                        'line' => $e->getLine(),
+                        'trace' => $e->getTraceAsString(),
+                        'type' => get_class($e)
+                    ];
+
+                    if ($errorId) {
+                        $context['error_id'] = $errorId;
+                    }
+
+                    $logger->error('Exception: {message}', $context);
                     return;
                 }
             }
-        } catch (\Throwable) {
-            // Fallback se logger não disponível
+        } catch (\Throwable $loggerError) {
+            // Fallback se logger não disponível - usar error_log
+            $errorMessage = sprintf(
+                '[%s] CRITICAL: %s in %s:%d',
+                date('Y-m-d H:i:s'),
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine()
+            );
+            error_log($errorMessage);
+            error_log('Logger Error: ' . $loggerError->getMessage());
         }
 
         // Fallback para error_log
@@ -828,9 +872,6 @@ class Application
                 }
             }
         }
-
-        // Enviar conteúdo
-        echo $response->getBody();
     }
 
     /**

@@ -101,9 +101,9 @@ class Request
      *
      * @return void
      */
-    private function parseRoute()
+    private function parseRoute(): void
     {
-        $this->parsePath();
+        // $this->parsePath(); // Moved to setPath method to allow setting path after instantiation
         $this->parseQuery();
         $this->parseBody();
     }
@@ -113,7 +113,7 @@ class Request
      *
      * @return void
      */
-    private function parsePath()
+    private function parsePath(): void
     {
         // Permitir barra final opcional
         $pattern = preg_replace('/\/:([^\/]+)/', '/([^/]+)', $this->path);
@@ -150,7 +150,7 @@ class Request
      *
      * @return void
      */
-    private function parseQuery()
+    private function parseQuery(): void
     {
         $query = $_SERVER['QUERY_STRING'] ?? '';
         $queryArray = [];
@@ -167,7 +167,7 @@ class Request
      * @throws InvalidArgumentException if the body cannot be parsed as JSON or form data
      * @throws RuntimeException if the request method is not supported
      */
-    private function parseBody()
+    private function parseBody(): void
     {
         if ($this->method === 'GET') {
             $this->body = new \stdClass();
@@ -208,7 +208,7 @@ class Request
      *                         encontrado.
      * @return mixed
      */
-    public function param(string $key, $default = null)
+    public function param(string $key, $default = null): mixed
     {
         return $this->params->{$key} ?? $default;
     }
@@ -222,7 +222,7 @@ class Request
      *                         encontrado.
      * @return mixed
      */
-    public function get(string $key, $default = null)
+    public function get(string $key, $default = null): mixed
     {
         return $this->query->{$key} ?? $default;
     }
@@ -235,7 +235,7 @@ class Request
      *                         encontrado.
      * @return mixed
      */
-    public function input(string $key, $default = null)
+    public function input(string $key, $default = null): mixed
     {
         return $this->body->{$key} ?? $default;
     }
@@ -354,6 +354,22 @@ class Request
         // @phpstan-ignore-next-line
         return new static($method, $path, $pathCallable);
     }
+
+    /**
+     * Define o caminho da rota, para validação e uso posterior.
+     *
+     * @param string $path O caminho da rota.
+     * @throws InvalidArgumentException Se o caminho estiver vazio.
+     */
+    public function setPath(string $path): void
+    {
+        if (empty($path)) {
+            throw new InvalidArgumentException('Path cannot be empty');
+        }
+        $this->path = $path;
+        $this->parsePath();
+    }
+
     /**
      * Obtém o caminho da rota.
      * @return string
