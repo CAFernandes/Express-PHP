@@ -139,8 +139,11 @@ class Response
      * @param  mixed $data Dados a serem enviados.
      * @return $this
      */
-    public function json($data)
+    public function json($data, ?int $statusCode = null): self
     {
+        if (!empty($statusCode) && is_int($statusCode)) {
+            $this->status($statusCode);
+        }
         $this->header('Content-Type', 'application/json; charset=utf-8');
 
         // Sanitizar dados para UTF-8 válido antes da codificação

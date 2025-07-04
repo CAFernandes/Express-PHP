@@ -638,11 +638,14 @@ class Application
         if ($debug) {
             return $response->json(
                 [
-                    'error' => true,
-                    'message' => $e->getMessage(),
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine(),
-                    'trace' => $e->getTraceAsString()
+                    'error'    => true,
+                    'message'  => $e->getMessage(),
+                    'file'     => $e->getFile(),
+                    'line'     => $e->getLine(),
+                    'trace'    => explode("\n", $e->getTraceAsString()),
+                    'method'   => $request ? $request->getMethod() : null,
+                    'path'     => $request ? $request->getPath() : null,
+                    'callable' => $request ? $request->getPathCallable() : null
                 ]
             );
         } else {
@@ -654,10 +657,9 @@ class Application
 
             return $response->json(
                 [
-                    'error' => true,
-                    'message' => $statusCode === 404 ? 'Not Found' : 'Internal Server Error',
+                    'error'    => true,
+                    'message'  => $statusCode === 404 ? 'Not Found' : 'Internal Server Error',
                     'error_id' => $errorId,
-                    'trace' => $debug ? $e->getTraceAsString() : null
                 ]
             );
         }
